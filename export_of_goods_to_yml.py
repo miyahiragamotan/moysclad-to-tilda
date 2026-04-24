@@ -1,6 +1,8 @@
 # export_of_goods_to_yml.py
 
 import os
+from datetime import datetime, timedelta, timezone
+import xml.etree.ElementTree as ET
 from time import sleep
 from dotenv import load_dotenv
 from module.logger_config import LoggerConfig
@@ -14,13 +16,14 @@ logger = LoggerConfig('logs/export_of_goods_to_yml').get_logger(__name__)
 
 
 def main(sclad):
-    url = f"https://api.moysklad.ru/api/remap/1.2/entity/product?filter={sclad["filter_name"]}={sclad["filter_value"]}"
+    url = f"https://api.moysklad.ru/api/remap/1.2/entity/product?filter={sclad['filter_name']}={sclad['filter_value']}"
     products = msclad.make_request("GET", url, sclad["token"]) # Получаем список товаров по фильтру
     if "rows" in products:
         if len(products["rows"]) > 0:
-            logger.info(f"Найдено {len(products["rows"])} товаров.")
+            logger.info(f"Найдено {len(products['rows'])} товаров.")
             items = format_products(sclad, products["rows"])
-            print(len(items))
+            file_path = create_yml_file(items)
+            logger.info(f"YML файл успешно создан: {file_path}")
         else:
             logger.warning(f"Товары не найдены.")
     else:
@@ -90,6 +93,59 @@ def variants_product(sclad, id):
 
             items.append(item)
     return items
+
+
+def create_yml_file(items, file_path="export_of_goods.yml"):
+    yml_catalog = ET.Element(
+        "yml_catalog",
+        attrib={
+            "date": datetime.now(timezone(timedelta(hours=3))).isoformat(timespec="seconds")
+        },
+    )
+    shop = ET.SubElement(yml_catalog, "shop")
+
+    ET.SubElement(shop, "name").text = "LONES"
+    ET.SubElement(shop, "company").text = "lones"
+    ET.SubElement(shop, "url").text = "https://lones-computers.ru"
+    ET.SubElement(shop, "platform").text = "Tilda Publishing"
+    ET.SubElement(shop, "version").text = "1.0"
+
+    currencies = ET.SubElement(shop, "currencies")
+    ET.SubElement(currencies, "currency", attrib={"id": "RUR", "rate": "1"})
+
+    categories = ET.SubElement(shop, "categories")
+    ET.SubElement(categories, "category", attrib={"id": "1", "parentId": "2"}).text = "Настольные компьютеры"
+
+    offers = ET.SubElement(shop, "offers")
+
+    for item in items:
+        if "variants" not in item or not item["variants"]:
+            continue
+
+        variant = item["variants"][0]
+        offer = ET.SubElement(
+            offers,
+            "offer",
+            attrib={
+                "id": variant["id"],
+                "group_id": item["id"],
+            },
+        )
+        ET.SubElement(offer, "name").text = variant["name"]
+        ET.SubElement(offer, "vendor").text = "LONESPC"
+        ET.SubElement(offer, "count").text = "9999"
+        ET.SubElement(offer, "price").text = str(variant["salePrice"])
+        ET.SubElement(offer, "currencyId").text = "RUR"
+        ET.SubElement(offer, "categoryId").text = "140451609632"
+
+        characteristics = list(variant.get("characteristics", {}).items())
+        for name, value in characteristics[:4]:
+            ET.SubElement(offer, "param", attrib={"name": str(name)}).text = str(value)
+
+    tree = ET.ElementTree(yml_catalog)
+    ET.indent(tree, space="\t", level=0)
+    tree.write(file_path, encoding="UTF-8", xml_declaration=True)
+    return file_path
             
             
 
