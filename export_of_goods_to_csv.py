@@ -1,6 +1,7 @@
 # export_of_goods_to_yml.py
 
 import os
+import csv
 from datetime import datetime, timedelta, timezone
 import xml.etree.ElementTree as ET
 from time import sleep
@@ -98,49 +99,72 @@ def variants_product(sclad, id):
     return items        
             
 def create_csv_file(items, file_path="export_of_goods.csv"):
-    for item in items:
-        if "variants" in item:
-            # Tilda UID - item['id']
-            # Category - "Настольные компьютеры"
-            # Brand - "LONES"
-            # SKU - item['code']
-            # Title - item['name']
-            # Price - None
-            # Quantity - None
-            # Editions - None
-            # External ID - item['externalCode']
-            # Parent UID - None
+    fieldnames = [
+        "Tilda UID",
+        "Category",
+        "Brand",
+        "SKU",
+        "Title",
+        "Price",
+        "Quantity",
+        "Editions",
+        "External ID",
+        "Parent UID",
+    ]
+
+    with open(file_path, "w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames, delimiter=";")
+        writer.writeheader()
+
+        for item in items:
+            if "variants" in item:
+                writer.writerow({
+                    "Tilda UID": item["id"],
+                    "Category": "Настольные компьютеры",
+                    "Brand": "LONES",
+                    "SKU": item["code"],
+                    "Title": item["name"],
+                    "Price": None,
+                    "Quantity": None,
+                    "Editions": None,
+                    "External ID": item["externalCode"],
+                    "Parent UID": None,
+                })
+
                 for variant in item["variants"]:
-                    # Столбцы:
-                    # Tilda UID - variant['id']
-                    # Brand - None
-                    # SKU - variant['code']
-                    # Title - variant['name']
-                    # Price - variant["salePrice"]
-                    # Quantity - 999
-                    # External ID - variant['externalCode']
-                    # Parent UID - item['id']
-                    if "characteristics" in variant:
-                        characteristic_str = ""
-                        for characteristic in variant["characteristics"]:
-                            characteristic_str += f"{characteristic.name()}:{characteristic.name()};"
-                        characteristic_str = characteristic_str[:-1]
-                        # Editions  - characteristic_str
-                    else:
-                        # Editions - None
-                        pass
-        else:
-            # Tilda UID - item['id']
-            # Category - "Настольные компьютеры"
-            # Brand - "LONES"
-            # SKU - item['code']
-            # Title - item['name']
-            # Price - item['salePrice']
-            # Quantity - 999
-            # Editions - None
-            # External ID - item['externalCode']
-            # Parent UID - None
-            pass
+                    editions = None
+                    if "characteristics" in variant and variant["characteristics"]:
+                        editions = ";".join(
+                            f"{name}:{value}" for name, value in variant["characteristics"].items()
+                        )
+
+                    writer.writerow({
+                        "Tilda UID": variant["id"],
+                        "Category": None,
+                        "Brand": None,
+                        "SKU": variant["code"],
+                        "Title": variant["name"],
+                        "Price": variant["salePrice"],
+                        "Quantity": 999,
+                        "Editions": editions,
+                        "External ID": variant["externalCode"],
+                        "Parent UID": item["id"],
+                    })
+            else:
+                writer.writerow({
+                    "Tilda UID": item["id"],
+                    "Category": "Настольные компьютеры",
+                    "Brand": "LONES",
+                    "SKU": item["code"],
+                    "Title": item["name"],
+                    "Price": item["salePrice"],
+                    "Quantity": 999,
+                    "Editions": None,
+                    "External ID": item["externalCode"],
+                    "Parent UID": None,
+                })
+
+    return file_path
 
 
 
