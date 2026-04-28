@@ -9,7 +9,7 @@ from module.logger_config import LoggerConfig
 import module.msclad as msclad
 
 # Настройки логирования
-logger = LoggerConfig('logs/export_of_goods_to_yml').get_logger(__name__)
+logger = LoggerConfig('logs/export_of_goods_to_csv').get_logger(__name__)
 # logger.info(f"Найдено {len()} товаров")
 # logger.warning(f"Не найдены товары")
 # logger.error(f"Ошибка: {e}")
@@ -22,7 +22,7 @@ def main(sclad):
         if len(products["rows"]) > 0:
             logger.info(f"Найдено {len(products['rows'])} товаров.")
             items = format_products(sclad, products["rows"])
-            file_path = create_yml_file(items)
+            file_path = create_csv_file(items)
             logger.info(f"YML файл успешно создан: {file_path}")
         else:
             logger.warning(f"Товары не найдены.")
@@ -95,61 +95,51 @@ def variants_product(sclad, id):
                     break
 
             items.append(item)
-    return items
-
-
-def create_yml_file(items, file_path="export_of_goods.yml"):
-    yml_catalog = ET.Element(
-        "yml_catalog",
-        attrib={
-            "date": datetime.now(timezone(timedelta(hours=3))).isoformat(timespec="seconds")
-        },
-    )
-    shop = ET.SubElement(yml_catalog, "shop")
-
-    ET.SubElement(shop, "name").text = "LONES"
-    ET.SubElement(shop, "company").text = "lones"
-    ET.SubElement(shop, "url").text = "https://online.moysklad.ru/"
-    ET.SubElement(shop, "platform").text = "МойСклад"
-
-    currencies = ET.SubElement(shop, "currencies")
-    ET.SubElement(currencies, "currency", attrib={"id": "RUR", "rate": "1"})
-
-    categories = ET.SubElement(shop, "categories")
-    ET.SubElement(categories, "category", attrib={"id": "1", "parentId": "2"}).text = "Настольные компьютеры"
-
-    offers = ET.SubElement(shop, "offers")
-
+    return items        
+            
+def create_csv_file(items, file_path="export_of_goods.csv"):
     for item in items:
-        if "variants" not in item or not item["variants"]:
-            continue
-        
-        for variant in item["variants"]:
-            offer = ET.SubElement(
-                offers,
-                "offer",
-                attrib={
-                    "id": variant["id"],
-                    "group_id": item["id"],
-                },
-            )
-            ET.SubElement(offer, "name").text = variant["name"]
-            ET.SubElement(offer, "vendor").text = "LONESPC"
-            ET.SubElement(offer, "count").text = "9999"
-            ET.SubElement(offer, "price").text = str(variant["salePrice"])
-            ET.SubElement(offer, "currencyId").text = "RUR"
-            ET.SubElement(offer, "categoryId").text = "140451609632"
+        if "variants" in item:
+            # Tilda UID - item['id']
+            # Brand - "LONES"
+            # SKU - item['code']
+            # Title - item['name']
+            # Price - None
+            # Quantity - None
+            # Editions - None
+            # External ID - item['externalCode']
+            # Parent UID - None
+                for variant in item["variants"]:
+                    # Столбцы:
+                    # Tilda UID - variant['id']
+                    # Brand - None
+                    # SKU - variant['code']
+                    # Title - variant['name']
+                    # Price - variant["salePrice"]
+                    # Quantity - 999
+                    # External ID - variant['externalCode']
+                    # Parent UID - item['id']
+                    if "characteristics" in variant:
+                        characteristic_str = ""
+                        for characteristic in variant["characteristics"]:
+                            characteristic_str += f"{characteristic.name()}:{characteristic.name()};"
+                        characteristic_str = characteristic_str[:-1]
+                        # Editions  - characteristic_str
+                    else:
+                        # Editions - None
+                        pass
+        else:
+            # Tilda UID - item['id']
+            # Brand - "LONES"
+            # SKU - item['code']
+            # Title - item['name']
+            # Price - item['salePrice']
+            # Quantity - 999
+            # Editions - None
+            # External ID - item['externalCode']
+            # Parent UID - None
+            pass
 
-            characteristics = list(variant.get("characteristics", {}).items())
-            for name, value in characteristics:
-                ET.SubElement(offer, "param", attrib={"name": str(name)}).text = str(value)
-
-    tree = ET.ElementTree(yml_catalog)
-    ET.indent(tree, space="\t", level=0)
-    tree.write(file_path, encoding="UTF-8", xml_declaration=True)
-    return file_path
-            
-            
 
 
 
