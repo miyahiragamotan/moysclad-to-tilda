@@ -101,6 +101,7 @@ def create_csv_file(items, file_path="export_of_goods.csv"):
     for item in items:
         if "variants" in item:
             # Tilda UID - item['id']
+            # Category - "Настольные компьютеры"
             # Brand - "LONES"
             # SKU - item['code']
             # Title - item['name']
@@ -130,6 +131,7 @@ def create_csv_file(items, file_path="export_of_goods.csv"):
                         pass
         else:
             # Tilda UID - item['id']
+            # Category - "Настольные компьютеры"
             # Brand - "LONES"
             # SKU - item['code']
             # Title - item['name']
