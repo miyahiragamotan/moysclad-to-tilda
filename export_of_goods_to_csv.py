@@ -7,7 +7,8 @@ import xml.etree.ElementTree as ET
 from time import sleep
 from dotenv import load_dotenv
 from module.logger_config import LoggerConfig
-import module.msclad as msclad
+import module.msclad_api as msclad_api
+import module.moysclad as moysclad
 
 # Настройки логирования
 logger = LoggerConfig('logs/export_of_goods_to_csv').get_logger(__name__)
@@ -16,89 +17,24 @@ logger = LoggerConfig('logs/export_of_goods_to_csv').get_logger(__name__)
 # logger.error(f"Ошибка: {e}")
 
 
-def main(sclad):
+def main(sclad, setting):
     url = f"https://api.moysklad.ru/api/remap/1.2/entity/product?filter={sclad['filter_name']}={sclad['filter_value']}"
-    products = msclad.make_request("GET", url, sclad["token"]) # Получаем список товаров по фильтру
+    products = msclad_api.make_request("GET", url, sclad["token"]) # Получаем список товаров по фильтру
     if "rows" in products:
         if len(products["rows"]) > 0:
             logger.info(f"Найдено {len(products['rows'])} товаров.")
-            items = format_products(sclad, products["rows"])
-            file_path = create_csv_file(items)
-            logger.info(f"YML файл успешно создан: {file_path}")
+            items = moysclad.format_products(logger, sclad, products["rows"])
+            file_path = create_csv_file(items, setting, setting["file_path"])
+            logger.info(f"CSV файл успешно создан: {file_path}")
         else:
             logger.warning(f"Товары не найдены.")
     else:
         logger.error(f"Ошибка получения товаров: {products}.")
 
 
-# Форматируем товары, собираем всю информацию
-def format_products(sclad, products):
-    items = []
-    for product in products:
-        item = {
-            "id": product['id'],
-            "name": product['name'],
-            "externalCode": product['externalCode'],
-            "salePrice": 0,
-        }
-
-        # Проверяем заполнен ли код товара
-        if 'code' in product and product['code']:
-            item["code"] = product['code']
-        else:
-            logger.warning(f"Tовар \"{item['name']}\" пропущен: не заполнен код товара.")
-            continue
-        
-        # Собираем модификации товара
-        if 'variantsCount' in product and product['variantsCount'] > 0:
-            logger.info(f"У товара \"{item['name']}\" найдено {product['variantsCount']} модификаций.")
-            item["variants"] = variants_product(sclad, item["id"])
-        else:
-            logger.info(f"У товара \"{item['name']}\" не найдены модификации.")
-            for salePrice in product['salePrices']:
-                if salePrice['priceType']['id'] == sclad["id_sale_price"]:
-                    item["salePrice"] = salePrice["value"]
-                    break
-        items.append(item)
-    return items
-
-# Cобираем всю информацию по модификациям
-def variants_product(sclad, id):
-    url = f"https://api.moysklad.ru/api/remap/1.2/entity/variant?filter=productid={id}"
-    variants = msclad.make_request("GET", url, sclad["token"])
-    if len(variants["rows"]) > 0:
-        items = []
-
-        for variant in variants["rows"]:
-            item = {
-                "id": variant['id'],
-                "name": variant['name'],
-                "externalCode": variant['externalCode'],
-                "code": variant['code'],
-                "characteristics": {},
-                "salePrice": 0,
-
-            }
-
-            # Собираем свойства
-            if 'characteristics' in  variant:
-                for characteristic in variant['characteristics']:
-                    item["characteristics"][characteristic["name"]] = characteristic["value"]
-                # Пример полученных данных {'SSD': '1000GB SSD', 'CPU': 'I7-14700KF', 'GPU': 'RTX 5060 Ti 16GB', 'RAM': '32GB DDR5'}
-
-            # Получаем цену
-            for salePrice in variant['salePrices']:
-                if salePrice['priceType']['id'] == sclad["id_sale_price"]:
-                    if salePrice["value"] > 0:
-                        item["salePrice"] = salePrice["value"]
-                    else:
-                        item["salePrice"] = 0
-                    break
-
-            items.append(item)
-    return items        
+      
             
-def create_csv_file(items, file_path="export_of_goods.csv"):
+def create_csv_file(items, setting, file_path="export_of_goods.csv"):
     fieldnames = [
         "Tilda UID",
         "Category",
@@ -120,8 +56,8 @@ def create_csv_file(items, file_path="export_of_goods.csv"):
             if "variants" in item:
                 writer.writerow({
                     "Tilda UID": item["id"],
-                    "Category": "Настольные компьютеры",
-                    "Brand": "LONES",
+                    "Category": setting["default_category"],
+                    "Brand": setting["default_brand"],
                     "SKU": item["code"],
                     "Title": item["name"],
                     "Price": None,
@@ -131,7 +67,7 @@ def create_csv_file(items, file_path="export_of_goods.csv"):
                     "Parent UID": None,
                 })
 
-                for variant in item["variants"]:
+                for variant in item["variants"][:4]:
                     editions = None
                     if "characteristics" in variant and variant["characteristics"]:
                         editions = ";".join(
@@ -145,7 +81,7 @@ def create_csv_file(items, file_path="export_of_goods.csv"):
                         "SKU": variant["code"],
                         "Title": variant["name"],
                         "Price": variant["salePrice"],
-                        "Quantity": 999,
+                        "Quantity": int(setting["default_quantity"]),
                         "Editions": editions,
                         "External ID": variant["externalCode"],
                         "Parent UID": item["id"],
@@ -153,12 +89,12 @@ def create_csv_file(items, file_path="export_of_goods.csv"):
             else:
                 writer.writerow({
                     "Tilda UID": item["id"],
-                    "Category": "Настольные компьютеры",
-                    "Brand": "LONES",
+                    "Category": setting["default_category"],
+                    "Brand": setting["default_brand"],
                     "SKU": item["code"],
                     "Title": item["name"],
                     "Price": item["salePrice"],
-                    "Quantity": 999,
+                    "Quantity": int(setting["default_quantity"]),
                     "Editions": None,
                     "External ID": item["externalCode"],
                     "Parent UID": None,
@@ -178,4 +114,10 @@ if __name__ == "__main__":
         "filter_value": os.getenv('filter_value'),
         "id_sale_price": os.getenv('id_sale_price')
     }
-    main(sclad)
+    setting = {
+        "file_path": os.getenv('file_path_csv'),
+        "default_category": os.getenv('default_category'),
+        "default_brand": os.getenv('default_brand'),
+        "default_quantity": os.getenv('default_quantity'),
+    }
+    main(sclad, setting)
