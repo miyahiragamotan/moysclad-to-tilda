@@ -67,7 +67,7 @@ def create_csv_file(items, setting, file_path="export_of_goods.csv"):
                     "Parent UID": None,
                 })
 
-                for variant in item["variants"][:4]:
+                for variant in item["variants"]:
                     editions = None
                     if "characteristics" in variant and variant["characteristics"]:
                         editions = ";".join(
